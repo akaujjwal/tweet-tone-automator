@@ -1,6 +1,8 @@
 
 import { cn } from "@/lib/utils";
-import { Home, Settings, MessageSquare, BarChart3, Twitter, Bot } from "lucide-react";
+import { Home, Settings, MessageSquare, BarChart3, Twitter, Bot, LogOut } from "lucide-react";
+import { useAuth } from "@/hooks/useAuth";
+import { Button } from "@/components/ui/button";
 
 interface SidebarProps {
   activeTab: string;
@@ -9,6 +11,8 @@ interface SidebarProps {
 }
 
 export const Sidebar = ({ activeTab, setActiveTab, isConnected }: SidebarProps) => {
+  const { user, signOut } = useAuth();
+  
   const menuItems = [
     { id: "dashboard", label: "Dashboard", icon: Home },
     { id: "ai-settings", label: "AI Settings", icon: Bot },
@@ -16,9 +20,13 @@ export const Sidebar = ({ activeTab, setActiveTab, isConnected }: SidebarProps) 
     { id: "analytics", label: "Analytics", icon: BarChart3 },
   ];
 
+  const handleSignOut = async () => {
+    await signOut();
+  };
+
   return (
-    <div className="w-64 bg-white/80 backdrop-blur-md border-r border-slate-200 shadow-lg">
-      <div className="p-6">
+    <div className="w-64 bg-white/80 backdrop-blur-md border-r border-slate-200 shadow-lg flex flex-col">
+      <div className="p-6 flex-1">
         <div className="flex items-center gap-3 mb-8">
           <div className="w-10 h-10 bg-gradient-to-br from-blue-500 to-purple-600 rounded-xl flex items-center justify-center">
             <Twitter className="w-6 h-6 text-white" />
@@ -66,6 +74,30 @@ export const Sidebar = ({ activeTab, setActiveTab, isConnected }: SidebarProps) 
             <p className="text-xs text-slate-500">Auto-replies: Active</p>
           )}
         </div>
+      </div>
+
+      <div className="p-6 border-t border-slate-200">
+        <div className="flex items-center gap-3 mb-4">
+          <div className="w-8 h-8 bg-gradient-to-br from-blue-500 to-purple-600 rounded-full flex items-center justify-center">
+            <span className="text-white text-sm font-medium">
+              {user?.email?.charAt(0).toUpperCase()}
+            </span>
+          </div>
+          <div className="flex-1 min-w-0">
+            <p className="text-sm font-medium text-slate-700 truncate">
+              {user?.email}
+            </p>
+          </div>
+        </div>
+        <Button 
+          onClick={handleSignOut}
+          variant="outline" 
+          size="sm" 
+          className="w-full"
+        >
+          <LogOut className="w-4 h-4 mr-2" />
+          Sign Out
+        </Button>
       </div>
     </div>
   );

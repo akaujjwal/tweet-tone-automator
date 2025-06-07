@@ -9,7 +9,171 @@ export type Json =
 export type Database = {
   public: {
     Tables: {
-      [_ in never]: never
+      analytics: {
+        Row: {
+          created_at: string | null
+          date: string
+          engagement_rate: number | null
+          id: string
+          replies_sent: number | null
+          response_time_avg: number | null
+          user_id: string
+        }
+        Insert: {
+          created_at?: string | null
+          date: string
+          engagement_rate?: number | null
+          id?: string
+          replies_sent?: number | null
+          response_time_avg?: number | null
+          user_id: string
+        }
+        Update: {
+          created_at?: string | null
+          date?: string
+          engagement_rate?: number | null
+          id?: string
+          replies_sent?: number | null
+          response_time_avg?: number | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "analytics_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      profiles: {
+        Row: {
+          avatar_url: string | null
+          created_at: string | null
+          id: string
+          twitter_username: string | null
+          updated_at: string | null
+          username: string | null
+        }
+        Insert: {
+          avatar_url?: string | null
+          created_at?: string | null
+          id: string
+          twitter_username?: string | null
+          updated_at?: string | null
+          username?: string | null
+        }
+        Update: {
+          avatar_url?: string | null
+          created_at?: string | null
+          id?: string
+          twitter_username?: string | null
+          updated_at?: string | null
+          username?: string | null
+        }
+        Relationships: []
+      }
+      reply_logs: {
+        Row: {
+          ai_reply_text: string
+          created_at: string | null
+          engagement_likes: number | null
+          engagement_replies: number | null
+          id: string
+          original_author: string
+          original_tweet_id: string
+          original_tweet_text: string
+          posted_at: string | null
+          sentiment: Database["public"]["Enums"]["sentiment_type"] | null
+          status: Database["public"]["Enums"]["reply_status"] | null
+          updated_at: string | null
+          user_id: string
+        }
+        Insert: {
+          ai_reply_text: string
+          created_at?: string | null
+          engagement_likes?: number | null
+          engagement_replies?: number | null
+          id?: string
+          original_author: string
+          original_tweet_id: string
+          original_tweet_text: string
+          posted_at?: string | null
+          sentiment?: Database["public"]["Enums"]["sentiment_type"] | null
+          status?: Database["public"]["Enums"]["reply_status"] | null
+          updated_at?: string | null
+          user_id: string
+        }
+        Update: {
+          ai_reply_text?: string
+          created_at?: string | null
+          engagement_likes?: number | null
+          engagement_replies?: number | null
+          id?: string
+          original_author?: string
+          original_tweet_id?: string
+          original_tweet_text?: string
+          posted_at?: string | null
+          sentiment?: Database["public"]["Enums"]["sentiment_type"] | null
+          status?: Database["public"]["Enums"]["reply_status"] | null
+          updated_at?: string | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "reply_logs_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      user_settings: {
+        Row: {
+          auto_reply_enabled: boolean | null
+          created_at: string | null
+          id: string
+          keywords: string[] | null
+          max_replies_per_hour: number | null
+          personality_type: string | null
+          response_delay_seconds: number | null
+          updated_at: string | null
+          user_id: string
+        }
+        Insert: {
+          auto_reply_enabled?: boolean | null
+          created_at?: string | null
+          id?: string
+          keywords?: string[] | null
+          max_replies_per_hour?: number | null
+          personality_type?: string | null
+          response_delay_seconds?: number | null
+          updated_at?: string | null
+          user_id: string
+        }
+        Update: {
+          auto_reply_enabled?: boolean | null
+          created_at?: string | null
+          id?: string
+          keywords?: string[] | null
+          max_replies_per_hour?: number | null
+          personality_type?: string | null
+          response_delay_seconds?: number | null
+          updated_at?: string | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "user_settings_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: true
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Views: {
       [_ in never]: never
@@ -18,7 +182,15 @@ export type Database = {
       [_ in never]: never
     }
     Enums: {
-      [_ in never]: never
+      reply_status: "pending" | "posted" | "failed"
+      sentiment_type:
+        | "positive"
+        | "negative"
+        | "neutral"
+        | "supportive"
+        | "thoughtful"
+        | "helpful"
+        | "diplomatic"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -133,6 +305,17 @@ export type CompositeTypes<
 
 export const Constants = {
   public: {
-    Enums: {},
+    Enums: {
+      reply_status: ["pending", "posted", "failed"],
+      sentiment_type: [
+        "positive",
+        "negative",
+        "neutral",
+        "supportive",
+        "thoughtful",
+        "helpful",
+        "diplomatic",
+      ],
+    },
   },
 } as const

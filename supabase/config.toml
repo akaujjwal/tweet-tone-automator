@@ -1,1 +1,8 @@
+
 project_id = "uicsbcxkvqzfhacdpjtz"
+
+[functions.generate-ai-reply]
+verify_jwt = false
+
+[functions.post-tweet-reply]
+verify_jwt = false

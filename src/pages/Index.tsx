@@ -5,10 +5,12 @@ import { Dashboard } from "@/components/Dashboard";
 import { AISettings } from "@/components/AISettings";
 import { ReplyLog } from "@/components/ReplyLog";
 import { Analytics } from "@/components/Analytics";
+import { useAuth } from "@/hooks/useAuth";
 
 const Index = () => {
   const [activeTab, setActiveTab] = useState("dashboard");
   const [isConnected, setIsConnected] = useState(false);
+  const { user } = useAuth();
 
   const renderContent = () => {
     switch (activeTab) {
@@ -24,6 +26,10 @@ const Index = () => {
         return <Dashboard isConnected={isConnected} setIsConnected={setIsConnected} />;
     }
   };
+
+  if (!user) {
+    return null; // ProtectedRoute will handle redirect
+  }
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-purple-50 w-full">
