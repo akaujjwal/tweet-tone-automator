@@ -68,13 +68,17 @@ serve(async (req) => {
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
     if (action === 'get_auth_url') {
-      // Step 1: Get request token
+      // Step 1: Get request token with proper callback URL
       const requestTokenUrl = "https://api.twitter.com/oauth/request_token";
-      const callbackUrl = `${Deno.env.get('SUPABASE_URL')}/functions/v1/twitter-oauth-callback`;
+      const callbackUrl = `${supabaseUrl}/functions/v1/twitter-oauth-callback`;
+      
+      console.log('Using callback URL:', callbackUrl);
       
       const oauthHeader = generateOAuthHeader('POST', requestTokenUrl, {
-        oauth_callback: encodeURIComponent(callbackUrl)
+        oauth_callback: callbackUrl
       });
+
+      console.log('OAuth Header:', oauthHeader);
 
       const response = await fetch(requestTokenUrl, {
         method: 'POST',
@@ -99,15 +103,6 @@ serve(async (req) => {
       if (!oauthToken || !oauthTokenSecret) {
         throw new Error('Invalid response from Twitter');
       }
-
-      // Store the token secret temporarily (you might want to use a more secure method)
-      await supabase
-        .from('profiles')
-        .update({ 
-          // You could store this in user metadata or create a separate table
-          // For now, we'll handle it in the callback
-        })
-        .eq('id', userId);
 
       const authUrl = `https://api.twitter.com/oauth/authorize?oauth_token=${oauthToken}`;
 
