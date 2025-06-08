@@ -2,9 +2,11 @@
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Switch } from "@/components/ui/switch";
-import { Twitter, Bot, Zap, TrendingUp } from "lucide-react";
-import { useState } from "react";
+import { Twitter, Bot, Zap, TrendingUp, MessageSquare } from "lucide-react";
+import { useState, useEffect } from "react";
 import { useToast } from "@/hooks/use-toast";
+import { useAuth } from "@/hooks/useAuth";
+import { supabase } from "@/integrations/supabase/client";
 
 interface DashboardProps {
   isConnected: boolean;
@@ -13,23 +15,83 @@ interface DashboardProps {
 
 export const Dashboard = ({ isConnected, setIsConnected }: DashboardProps) => {
   const [autoReplyEnabled, setAutoReplyEnabled] = useState(false);
+  const [twitterUsername, setTwitterUsername] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
   const { toast } = useToast();
+  const { user } = useAuth();
 
-  const handleConnect = () => {
-    setIsConnected(true);
-    toast({
-      title: "Connected to X (Twitter)",
-      description: "Your account has been successfully connected!",
-    });
+  // Check if user has Twitter connection on mount
+  useEffect(() => {
+    if (user) {
+      checkTwitterConnection();
+    }
+  }, [user]);
+
+  const checkTwitterConnection = async () => {
+    try {
+      const { data: profile } = await supabase
+        .from('profiles')
+        .select('twitter_username')
+        .eq('id', user?.id)
+        .single();
+
+      if (profile?.twitter_username) {
+        setTwitterUsername(profile.twitter_username);
+        setIsConnected(true);
+      }
+    } catch (error) {
+      console.error('Error checking Twitter connection:', error);
+    }
   };
 
-  const handleDisconnect = () => {
-    setIsConnected(false);
-    setAutoReplyEnabled(false);
-    toast({
-      title: "Disconnected from X",
-      description: "Your account has been disconnected.",
-    });
+  const handleConnectTwitter = async () => {
+    setLoading(true);
+    try {
+      // Generate Twitter OAuth URL
+      const response = await supabase.functions.invoke('twitter-oauth', {
+        body: { action: 'get_auth_url' }
+      });
+
+      if (response.error) {
+        throw new Error(response.error.message);
+      }
+
+      // Redirect to Twitter OAuth
+      window.location.href = response.data.auth_url;
+    } catch (error: any) {
+      toast({
+        title: "Connection Failed",
+        description: error.message || "Failed to connect to Twitter",
+        variant: "destructive",
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleDisconnect = async () => {
+    try {
+      // Update profile to remove Twitter username
+      await supabase
+        .from('profiles')
+        .update({ twitter_username: null })
+        .eq('id', user?.id);
+
+      setIsConnected(false);
+      setAutoReplyEnabled(false);
+      setTwitterUsername(null);
+      
+      toast({
+        title: "Disconnected from X",
+        description: "Your account has been disconnected.",
+      });
+    } catch (error: any) {
+      toast({
+        title: "Error",
+        description: "Failed to disconnect account",
+        variant: "destructive",
+      });
+    }
   };
 
   const stats = [
@@ -54,18 +116,22 @@ export const Dashboard = ({ isConnected, setIsConnected }: DashboardProps) => {
             </div>
             <CardTitle className="text-2xl">Connect Your X Account</CardTitle>
             <CardDescription className="text-lg">
-              Get started by connecting your Twitter account to enable AI-powered auto-replies
+              Authorize ReplyBot AI to access your Twitter account for automated replies
             </CardDescription>
           </CardHeader>
           <CardContent className="text-center">
             <Button 
-              onClick={handleConnect}
+              onClick={handleConnectTwitter}
               size="lg"
+              disabled={loading}
               className="bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700 text-white px-8 py-3 text-lg"
             >
               <Twitter className="w-5 h-5 mr-2" />
-              Connect with X
+              {loading ? "Connecting..." : "Connect with X"}
             </Button>
+            <p className="text-sm text-slate-500 mt-4">
+              You'll be redirected to Twitter to authorize the connection
+            </p>
           </CardContent>
         </Card>
       ) : (
@@ -135,7 +201,9 @@ export const Dashboard = ({ isConnected, setIsConnected }: DashboardProps) => {
                 <div className="flex items-center gap-3 p-3 bg-emerald-50 rounded-lg border border-emerald-200">
                   <div className="w-3 h-3 bg-emerald-500 rounded-full" />
                   <div>
-                    <p className="font-medium text-emerald-800">Connected as @demo_user</p>
+                    <p className="font-medium text-emerald-800">
+                      Connected as @{twitterUsername || "your_account"}
+                    </p>
                     <p className="text-sm text-emerald-600">Ready to start auto-replying</p>
                   </div>
                 </div>
@@ -176,6 +244,3 @@ export const Dashboard = ({ isConnected, setIsConnected }: DashboardProps) => {
     </div>
   );
 };
-
-// Import statement for MessageSquare icon
-import { MessageSquare } from "lucide-react";
