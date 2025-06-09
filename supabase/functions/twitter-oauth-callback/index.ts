@@ -34,8 +34,11 @@ serve(async (req) => {
       throw new Error('Missing authorization code or state parameter');
     }
 
+    // Get the origin from the request headers or use the Lovable preview URL
+    const origin = req.headers.get('origin') || 'https://loving-waffle-01f11e.lovableproject.com';
+    
     // Redirect back to your app with the OAuth parameters
-    const redirectUrl = `${url.origin}/?code=${code}&state=${state}&twitter_auth=success`;
+    const redirectUrl = `${origin}/?code=${code}&state=${state}&twitter_auth=success`;
 
     return new Response(`
       <html>
