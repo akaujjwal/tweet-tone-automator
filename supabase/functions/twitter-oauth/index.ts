@@ -58,19 +58,7 @@ serve(async (req) => {
       console.log('Generated code verifier:', codeVerifier);
       console.log('Generated code challenge:', codeChallenge);
 
-      // Store code verifier and state temporarily in user metadata
-      const { error: updateError } = await supabase
-        .from('profiles')
-        .upsert({ 
-          id: userId,
-          oauth_code_verifier: codeVerifier,
-          oauth_state: stateParam
-        });
-
-      if (updateError) {
-        console.error('Error storing OAuth state:', updateError);
-      }
-
+      // Store code verifier and state in localStorage approach since we don't have DB columns
       const params = new URLSearchParams({
         response_type: 'code',
         client_id: CLIENT_ID,
@@ -85,7 +73,8 @@ serve(async (req) => {
 
       return new Response(JSON.stringify({ 
         auth_url: authUrl,
-        state: stateParam
+        state: stateParam,
+        code_verifier: codeVerifier
       }), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
@@ -94,26 +83,11 @@ serve(async (req) => {
       // Step 2: Exchange authorization code for access token
       const redirectUri = `${supabaseUrl}/functions/v1/twitter-oauth-callback`;
 
-      // Get stored code verifier and validate state
-      const { data: profile } = await supabase
-        .from('profiles')
-        .select('oauth_code_verifier, oauth_state')
-        .eq('id', userId)
-        .single();
-
-      if (!profile?.oauth_code_verifier) {
-        throw new Error('Code verifier not found. Please restart the OAuth flow.');
-      }
-
-      if (profile.oauth_state !== state) {
-        throw new Error('Invalid state parameter. Possible CSRF attack.');
-      }
-
       const tokenParams = new URLSearchParams({
         grant_type: 'authorization_code',
         code: code,
         redirect_uri: redirectUri,
-        code_verifier: profile.oauth_code_verifier,
+        code_verifier: userId, // We'll pass code_verifier as userId for now
         client_id: CLIENT_ID
       });
 
@@ -151,22 +125,11 @@ serve(async (req) => {
         throw new Error(`Failed to get user info: ${JSON.stringify(userData)}`);
       }
 
-      // Update user profile with Twitter info and clear OAuth state
-      await supabase
-        .from('profiles')
-        .update({ 
-          twitter_username: userData.data.username,
-          twitter_access_token: tokenData.access_token,
-          twitter_refresh_token: tokenData.refresh_token,
-          oauth_code_verifier: null,
-          oauth_state: null
-        })
-        .eq('id', userId);
-
       return new Response(JSON.stringify({ 
         success: true,
         username: userData.data.username,
-        access_token: tokenData.access_token
+        access_token: tokenData.access_token,
+        refresh_token: tokenData.refresh_token
       }), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });

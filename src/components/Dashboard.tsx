@@ -28,14 +28,9 @@ export const Dashboard = ({ isConnected, setIsConnected }: DashboardProps) => {
 
   const checkTwitterConnection = async () => {
     try {
-      const { data: profile } = await supabase
-        .from('profiles')
-        .select('twitter_username')
-        .eq('id', user?.id)
-        .single();
-
-      if (profile?.twitter_username) {
-        setTwitterUsername(profile.twitter_username);
+      const username = localStorage.getItem('twitter_username');
+      if (username) {
+        setTwitterUsername(username);
         setIsConnected(true);
       }
     } catch (error) {
@@ -67,9 +62,14 @@ export const Dashboard = ({ isConnected, setIsConnected }: DashboardProps) => {
         throw new Error(response.error.message);
       }
 
+      // Store OAuth parameters in localStorage
+      localStorage.setItem('twitter_oauth_state', response.data.state);
+      localStorage.setItem('twitter_oauth_code_verifier', response.data.code_verifier);
+
       // Redirect to Twitter OAuth
       window.location.href = response.data.auth_url;
     } catch (error: any) {
+      console.error('Twitter OAuth error:', error);
       toast({
         title: "Connection Failed",
         description: error.message || "Failed to connect to Twitter",
@@ -82,11 +82,10 @@ export const Dashboard = ({ isConnected, setIsConnected }: DashboardProps) => {
 
   const handleDisconnect = async () => {
     try {
-      // Update profile to remove Twitter username
-      await supabase
-        .from('profiles')
-        .update({ twitter_username: null })
-        .eq('id', user?.id);
+      // Remove Twitter credentials from localStorage
+      localStorage.removeItem('twitter_username');
+      localStorage.removeItem('twitter_access_token');
+      localStorage.removeItem('twitter_refresh_token');
 
       setIsConnected(false);
       setAutoReplyEnabled(false);

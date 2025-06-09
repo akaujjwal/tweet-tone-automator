@@ -25,13 +25,25 @@ const Index = () => {
 
       if (twitterAuth === 'success' && code && state && user) {
         try {
+          // Get stored OAuth parameters from localStorage
+          const storedState = localStorage.getItem('twitter_oauth_state');
+          const storedCodeVerifier = localStorage.getItem('twitter_oauth_code_verifier');
+
+          if (!storedState || !storedCodeVerifier) {
+            throw new Error('OAuth session expired. Please try connecting again.');
+          }
+
+          if (storedState !== state) {
+            throw new Error('Invalid OAuth state. Please try connecting again.');
+          }
+
           // Exchange the authorization code for access tokens
           const { data, error } = await supabase.functions.invoke('twitter-oauth', {
             body: {
               action: 'exchange_token',
               code: code,
               state: state,
-              userId: user.id
+              userId: storedCodeVerifier // Pass code_verifier as userId
             }
           });
 
@@ -40,6 +52,17 @@ const Index = () => {
           }
 
           if (data.success) {
+            // Store Twitter credentials in localStorage
+            localStorage.setItem('twitter_username', data.username);
+            localStorage.setItem('twitter_access_token', data.access_token);
+            if (data.refresh_token) {
+              localStorage.setItem('twitter_refresh_token', data.refresh_token);
+            }
+
+            // Clean up OAuth data
+            localStorage.removeItem('twitter_oauth_state');
+            localStorage.removeItem('twitter_oauth_code_verifier');
+
             setIsConnected(true);
             toast({
               title: "Twitter Connected!",
@@ -50,11 +73,19 @@ const Index = () => {
             window.history.replaceState({}, document.title, window.location.pathname);
           }
         } catch (error: any) {
+          console.error('Twitter OAuth error:', error);
           toast({
             title: "Connection Failed",
             description: error.message || "Failed to complete Twitter connection",
             variant: "destructive",
           });
+
+          // Clean up OAuth data on error
+          localStorage.removeItem('twitter_oauth_state');
+          localStorage.removeItem('twitter_oauth_code_verifier');
+          
+          // Clean up URL
+          window.history.replaceState({}, document.title, window.location.pathname);
         }
       }
     };
@@ -63,6 +94,16 @@ const Index = () => {
       handleTwitterCallback();
     }
   }, [user, toast]);
+
+  // Check for existing Twitter connection on mount
+  useEffect(() => {
+    if (user) {
+      const twitterUsername = localStorage.getItem('twitter_username');
+      if (twitterUsername) {
+        setIsConnected(true);
+      }
+    }
+  }, [user]);
 
   const renderContent = () => {
     switch (activeTab) {
