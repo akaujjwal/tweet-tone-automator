@@ -50,7 +50,7 @@ serve(async (req) => {
       // Step 1: Generate PKCE parameters and authorization URL
       const codeVerifier = generateCodeVerifier();
       const codeChallenge = await generateCodeChallenge(codeVerifier);
-      const state = generateCodeVerifier(); // Use as state parameter
+      const stateParam = generateCodeVerifier(); // Use as state parameter
       
       const redirectUri = `${supabaseUrl}/functions/v1/twitter-oauth-callback`;
       
@@ -64,7 +64,7 @@ serve(async (req) => {
         .upsert({ 
           id: userId,
           oauth_code_verifier: codeVerifier,
-          oauth_state: state
+          oauth_state: stateParam
         });
 
       if (updateError) {
@@ -76,7 +76,7 @@ serve(async (req) => {
         client_id: CLIENT_ID,
         redirect_uri: redirectUri,
         scope: 'tweet.read tweet.write users.read offline.access',
-        state: state,
+        state: stateParam,
         code_challenge: codeChallenge,
         code_challenge_method: 'S256'
       });
@@ -85,7 +85,7 @@ serve(async (req) => {
 
       return new Response(JSON.stringify({ 
         auth_url: authUrl,
-        state: state
+        state: stateParam
       }), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });

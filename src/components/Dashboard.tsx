@@ -1,4 +1,3 @@
-
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Switch } from "@/components/ui/switch";
@@ -45,11 +44,23 @@ export const Dashboard = ({ isConnected, setIsConnected }: DashboardProps) => {
   };
 
   const handleConnectTwitter = async () => {
+    if (!user) {
+      toast({
+        title: "Authentication Required",
+        description: "Please log in to connect your Twitter account",
+        variant: "destructive",
+      });
+      return;
+    }
+
     setLoading(true);
     try {
       // Generate Twitter OAuth URL
       const response = await supabase.functions.invoke('twitter-oauth', {
-        body: { action: 'get_auth_url' }
+        body: { 
+          action: 'get_auth_url',
+          userId: user.id 
+        }
       });
 
       if (response.error) {
