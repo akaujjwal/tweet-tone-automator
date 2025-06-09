@@ -40,6 +40,8 @@ serve(async (req) => {
   try {
     const { action, code, state, userId } = await req.json();
 
+    console.log('Received request:', { action, code: code ? 'present' : 'missing', state, userId });
+
     if (!CLIENT_ID || !CLIENT_SECRET) {
       throw new Error('Twitter OAuth credentials not configured');
     }
@@ -58,7 +60,6 @@ serve(async (req) => {
       console.log('Generated code verifier:', codeVerifier);
       console.log('Generated code challenge:', codeChallenge);
 
-      // Store code verifier and state in localStorage approach since we don't have DB columns
       const params = new URLSearchParams({
         response_type: 'code',
         client_id: CLIENT_ID,
@@ -82,16 +83,21 @@ serve(async (req) => {
     } else if (action === 'exchange_token') {
       // Step 2: Exchange authorization code for access token
       const redirectUri = `${supabaseUrl}/functions/v1/twitter-oauth-callback`;
+      const codeVerifier = userId; // We pass code_verifier as userId
+
+      console.log('Token exchange params:', { code, redirectUri, codeVerifier });
 
       const tokenParams = new URLSearchParams({
         grant_type: 'authorization_code',
         code: code,
         redirect_uri: redirectUri,
-        code_verifier: userId, // We'll pass code_verifier as userId for now
+        code_verifier: codeVerifier,
         client_id: CLIENT_ID
       });
 
       const authHeader = btoa(`${CLIENT_ID}:${CLIENT_SECRET}`);
+
+      console.log('Making token request to Twitter...');
 
       const response = await fetch('https://api.twitter.com/2/oauth2/token', {
         method: 'POST',
@@ -103,15 +109,17 @@ serve(async (req) => {
       });
 
       const responseText = await response.text();
+      console.log('Token exchange response status:', response.status);
       console.log('Token exchange response:', responseText);
 
       if (!response.ok) {
-        throw new Error(`Failed to get access token: ${responseText}`);
+        throw new Error(`Failed to get access token: ${response.status} - ${responseText}`);
       }
 
       const tokenData = JSON.parse(responseText);
 
       // Get user info from Twitter
+      console.log('Getting user info from Twitter...');
       const userResponse = await fetch('https://api.twitter.com/2/users/me', {
         headers: {
           'Authorization': `Bearer ${tokenData.access_token}`,
@@ -119,7 +127,7 @@ serve(async (req) => {
       });
 
       const userData = await userResponse.json();
-      console.log('User data:', userData);
+      console.log('User data response:', userData);
 
       if (!userResponse.ok) {
         throw new Error(`Failed to get user info: ${JSON.stringify(userData)}`);
@@ -139,7 +147,10 @@ serve(async (req) => {
 
   } catch (error: any) {
     console.error('Error in twitter-oauth function:', error);
-    return new Response(JSON.stringify({ error: error.message }), {
+    return new Response(JSON.stringify({ 
+      error: error.message,
+      success: false 
+    }), {
       status: 500,
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });

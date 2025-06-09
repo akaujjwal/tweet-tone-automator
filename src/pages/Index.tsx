@@ -23,11 +23,15 @@ const Index = () => {
       const state = urlParams.get('state');
       const twitterAuth = urlParams.get('twitter_auth');
 
+      console.log('OAuth callback params:', { code, state, twitterAuth });
+
       if (twitterAuth === 'success' && code && state && user) {
         try {
           // Get stored OAuth parameters from localStorage
           const storedState = localStorage.getItem('twitter_oauth_state');
           const storedCodeVerifier = localStorage.getItem('twitter_oauth_code_verifier');
+
+          console.log('Stored OAuth data:', { storedState, storedCodeVerifier });
 
           if (!storedState || !storedCodeVerifier) {
             throw new Error('OAuth session expired. Please try connecting again.');
@@ -37,21 +41,25 @@ const Index = () => {
             throw new Error('Invalid OAuth state. Please try connecting again.');
           }
 
+          console.log('Exchanging code for token...');
+
           // Exchange the authorization code for access tokens
           const { data, error } = await supabase.functions.invoke('twitter-oauth', {
             body: {
               action: 'exchange_token',
               code: code,
               state: state,
-              userId: storedCodeVerifier // Pass code_verifier as userId
+              userId: storedCodeVerifier
             }
           });
 
+          console.log('Token exchange response:', { data, error });
+
           if (error) {
-            throw new Error(error.message);
+            throw new Error(error.message || 'Failed to exchange token');
           }
 
-          if (data.success) {
+          if (data && data.success) {
             // Store Twitter credentials in localStorage
             localStorage.setItem('twitter_username', data.username);
             localStorage.setItem('twitter_access_token', data.access_token);
@@ -69,9 +77,13 @@ const Index = () => {
               description: `Successfully connected as @${data.username}`,
             });
 
-            // Clean up URL
-            window.history.replaceState({}, document.title, window.location.pathname);
+            console.log('Twitter connection successful!');
+          } else {
+            throw new Error('Token exchange failed');
           }
+
+          // Clean up URL
+          window.history.replaceState({}, document.title, window.location.pathname);
         } catch (error: any) {
           console.error('Twitter OAuth error:', error);
           toast({
