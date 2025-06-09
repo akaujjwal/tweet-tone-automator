@@ -1,56 +1,35 @@
 
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.50.0';
-import { createHmac } from "node:crypto";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
-const API_KEY = Deno.env.get("TWITTER_CONSUMER_KEY")?.trim();
-const API_SECRET = Deno.env.get("TWITTER_CONSUMER_SECRET")?.trim();
+const CLIENT_ID = Deno.env.get("TWITTER_CLIENT_ID")?.trim();
+const CLIENT_SECRET = Deno.env.get("TWITTER_CLIENT_SECRET")?.trim();
 const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
 const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
 
-function generateOAuthSignature(
-  method: string,
-  url: string,
-  params: Record<string, string>,
-  consumerSecret: string,
-  tokenSecret: string = ""
-): string {
-  const signatureBaseString = `${method}&${encodeURIComponent(
-    url
-  )}&${encodeURIComponent(
-    Object.entries(params)
-      .sort()
-      .map(([k, v]) => `${k}=${v}`)
-      .join("&")
-  )}`;
-  
-  const signingKey = `${encodeURIComponent(consumerSecret)}&${encodeURIComponent(tokenSecret)}`;
-  const hmacSha1 = createHmac("sha1", signingKey);
-  return hmacSha1.update(signatureBaseString).digest("base64");
+// Generate code verifier and challenge for PKCE
+function generateCodeVerifier(): string {
+  const array = new Uint8Array(32);
+  crypto.getRandomValues(array);
+  return btoa(String.fromCharCode.apply(null, Array.from(array)))
+    .replace(/\+/g, '-')
+    .replace(/\//g, '_')
+    .replace(/=/g, '');
 }
 
-function generateOAuthHeader(method: string, url: string, additionalParams: Record<string, string> = {}): string {
-  const oauthParams = {
-    oauth_consumer_key: API_KEY!,
-    oauth_nonce: Math.random().toString(36).substring(2),
-    oauth_signature_method: "HMAC-SHA1",
-    oauth_timestamp: Math.floor(Date.now() / 1000).toString(),
-    oauth_version: "1.0",
-    ...additionalParams
-  };
-
-  const signature = generateOAuthSignature(method, url, oauthParams, API_SECRET!);
-  const signedOAuthParams = { ...oauthParams, oauth_signature: signature };
-
-  return "OAuth " + Object.entries(signedOAuthParams)
-    .sort((a, b) => a[0].localeCompare(b[0]))
-    .map(([k, v]) => `${encodeURIComponent(k)}="${encodeURIComponent(v)}"`)
-    .join(", ");
+async function generateCodeChallenge(verifier: string): Promise<string> {
+  const encoder = new TextEncoder();
+  const data = encoder.encode(verifier);
+  const digest = await crypto.subtle.digest('SHA-256', data);
+  return btoa(String.fromCharCode.apply(null, Array.from(new Uint8Array(digest))))
+    .replace(/\+/g, '-')
+    .replace(/\//g, '_')
+    .replace(/=/g, '');
 }
 
 serve(async (req) => {
@@ -59,103 +38,135 @@ serve(async (req) => {
   }
 
   try {
-    const { action, oauth_token, oauth_verifier, userId } = await req.json();
+    const { action, code, state, userId } = await req.json();
 
-    if (!API_KEY || !API_SECRET) {
-      throw new Error('Twitter API credentials not configured');
+    if (!CLIENT_ID || !CLIENT_SECRET) {
+      throw new Error('Twitter OAuth credentials not configured');
     }
 
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
     if (action === 'get_auth_url') {
-      // Step 1: Get request token with proper callback URL
-      const requestTokenUrl = "https://api.twitter.com/oauth/request_token";
-      const callbackUrl = `${supabaseUrl}/functions/v1/twitter-oauth-callback`;
+      // Step 1: Generate PKCE parameters and authorization URL
+      const codeVerifier = generateCodeVerifier();
+      const codeChallenge = await generateCodeChallenge(codeVerifier);
+      const state = generateCodeVerifier(); // Use as state parameter
       
-      console.log('Using callback URL:', callbackUrl);
+      const redirectUri = `${supabaseUrl}/functions/v1/twitter-oauth-callback`;
       
-      const oauthHeader = generateOAuthHeader('POST', requestTokenUrl, {
-        oauth_callback: callbackUrl
-      });
+      console.log('Using redirect URI:', redirectUri);
+      console.log('Generated code verifier:', codeVerifier);
+      console.log('Generated code challenge:', codeChallenge);
 
-      console.log('OAuth Header:', oauthHeader);
+      // Store code verifier and state temporarily in user metadata
+      const { error: updateError } = await supabase
+        .from('profiles')
+        .upsert({ 
+          id: userId,
+          oauth_code_verifier: codeVerifier,
+          oauth_state: state
+        });
 
-      const response = await fetch(requestTokenUrl, {
-        method: 'POST',
-        headers: {
-          Authorization: oauthHeader,
-          "Content-Type": "application/x-www-form-urlencoded",
-        },
-        body: `oauth_callback=${encodeURIComponent(callbackUrl)}`
-      });
-
-      const responseText = await response.text();
-      console.log('Request token response:', responseText);
-
-      if (!response.ok) {
-        throw new Error(`Failed to get request token: ${responseText}`);
+      if (updateError) {
+        console.error('Error storing OAuth state:', updateError);
       }
 
-      const params = new URLSearchParams(responseText);
-      const oauthToken = params.get('oauth_token');
-      const oauthTokenSecret = params.get('oauth_token_secret');
+      const params = new URLSearchParams({
+        response_type: 'code',
+        client_id: CLIENT_ID,
+        redirect_uri: redirectUri,
+        scope: 'tweet.read tweet.write users.read offline.access',
+        state: state,
+        code_challenge: codeChallenge,
+        code_challenge_method: 'S256'
+      });
 
-      if (!oauthToken || !oauthTokenSecret) {
-        throw new Error('Invalid response from Twitter');
-      }
-
-      const authUrl = `https://api.twitter.com/oauth/authorize?oauth_token=${oauthToken}`;
+      const authUrl = `https://twitter.com/i/oauth2/authorize?${params.toString()}`;
 
       return new Response(JSON.stringify({ 
         auth_url: authUrl,
-        oauth_token: oauthToken,
-        oauth_token_secret: oauthTokenSecret 
+        state: state
       }), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
 
     } else if (action === 'exchange_token') {
-      // Step 2: Exchange request token for access token
-      const accessTokenUrl = "https://api.twitter.com/oauth/access_token";
-      
-      const oauthHeader = generateOAuthHeader('POST', accessTokenUrl, {
-        oauth_token: oauth_token,
-        oauth_verifier: oauth_verifier
+      // Step 2: Exchange authorization code for access token
+      const redirectUri = `${supabaseUrl}/functions/v1/twitter-oauth-callback`;
+
+      // Get stored code verifier and validate state
+      const { data: profile } = await supabase
+        .from('profiles')
+        .select('oauth_code_verifier, oauth_state')
+        .eq('id', userId)
+        .single();
+
+      if (!profile?.oauth_code_verifier) {
+        throw new Error('Code verifier not found. Please restart the OAuth flow.');
+      }
+
+      if (profile.oauth_state !== state) {
+        throw new Error('Invalid state parameter. Possible CSRF attack.');
+      }
+
+      const tokenParams = new URLSearchParams({
+        grant_type: 'authorization_code',
+        code: code,
+        redirect_uri: redirectUri,
+        code_verifier: profile.oauth_code_verifier,
+        client_id: CLIENT_ID
       });
 
-      const response = await fetch(accessTokenUrl, {
+      const authHeader = btoa(`${CLIENT_ID}:${CLIENT_SECRET}`);
+
+      const response = await fetch('https://api.twitter.com/2/oauth2/token', {
         method: 'POST',
         headers: {
-          Authorization: oauthHeader,
-          "Content-Type": "application/x-www-form-urlencoded",
+          'Authorization': `Basic ${authHeader}`,
+          'Content-Type': 'application/x-www-form-urlencoded',
         },
-        body: `oauth_verifier=${oauth_verifier}&oauth_token=${oauth_token}`
+        body: tokenParams.toString()
       });
 
       const responseText = await response.text();
+      console.log('Token exchange response:', responseText);
 
       if (!response.ok) {
         throw new Error(`Failed to get access token: ${responseText}`);
       }
 
-      const params = new URLSearchParams(responseText);
-      const accessToken = params.get('oauth_token');
-      const accessTokenSecret = params.get('oauth_token_secret');
-      const screenName = params.get('screen_name');
+      const tokenData = JSON.parse(responseText);
 
-      // Update user profile with Twitter info
+      // Get user info from Twitter
+      const userResponse = await fetch('https://api.twitter.com/2/users/me', {
+        headers: {
+          'Authorization': `Bearer ${tokenData.access_token}`,
+        },
+      });
+
+      const userData = await userResponse.json();
+      console.log('User data:', userData);
+
+      if (!userResponse.ok) {
+        throw new Error(`Failed to get user info: ${JSON.stringify(userData)}`);
+      }
+
+      // Update user profile with Twitter info and clear OAuth state
       await supabase
         .from('profiles')
         .update({ 
-          twitter_username: screenName
+          twitter_username: userData.data.username,
+          twitter_access_token: tokenData.access_token,
+          twitter_refresh_token: tokenData.refresh_token,
+          oauth_code_verifier: null,
+          oauth_state: null
         })
         .eq('id', userId);
 
       return new Response(JSON.stringify({ 
         success: true,
-        screen_name: screenName,
-        access_token: accessToken,
-        access_token_secret: accessTokenSecret
+        username: userData.data.username,
+        access_token: tokenData.access_token
       }), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });

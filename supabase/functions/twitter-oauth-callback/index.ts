@@ -4,17 +4,20 @@ import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 serve(async (req) => {
   try {
     const url = new URL(req.url);
-    const oauthToken = url.searchParams.get('oauth_token');
-    const oauthVerifier = url.searchParams.get('oauth_verifier');
-    const denied = url.searchParams.get('denied');
+    const code = url.searchParams.get('code');
+    const state = url.searchParams.get('state');
+    const error = url.searchParams.get('error');
+    const errorDescription = url.searchParams.get('error_description');
 
-    if (denied) {
-      // User denied access
+    if (error) {
+      // User denied access or other error
       return new Response(`
         <html>
           <body>
-            <h1>Authorization Cancelled</h1>
-            <p>You cancelled the Twitter authorization. You can close this window and try again.</p>
+            <h1>Authorization Error</h1>
+            <p>Error: ${error}</p>
+            ${errorDescription ? `<p>Description: ${errorDescription}</p>` : ''}
+            <p>You can close this window and try again.</p>
             <script>
               setTimeout(() => {
                 window.close();
@@ -27,12 +30,12 @@ serve(async (req) => {
       });
     }
 
-    if (!oauthToken || !oauthVerifier) {
-      throw new Error('Missing OAuth parameters');
+    if (!code || !state) {
+      throw new Error('Missing authorization code or state parameter');
     }
 
     // Redirect back to your app with the OAuth parameters
-    const redirectUrl = `${url.origin}/?oauth_token=${oauthToken}&oauth_verifier=${oauthVerifier}&twitter_auth=success`;
+    const redirectUrl = `${url.origin}/?code=${code}&state=${state}&twitter_auth=success`;
 
     return new Response(`
       <html>

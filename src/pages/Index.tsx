@@ -19,18 +19,18 @@ const Index = () => {
   useEffect(() => {
     const handleTwitterCallback = async () => {
       const urlParams = new URLSearchParams(window.location.search);
-      const oauthToken = urlParams.get('oauth_token');
-      const oauthVerifier = urlParams.get('oauth_verifier');
+      const code = urlParams.get('code');
+      const state = urlParams.get('state');
       const twitterAuth = urlParams.get('twitter_auth');
 
-      if (twitterAuth === 'success' && oauthToken && oauthVerifier && user) {
+      if (twitterAuth === 'success' && code && state && user) {
         try {
-          // Exchange the tokens for access tokens
+          // Exchange the authorization code for access tokens
           const { data, error } = await supabase.functions.invoke('twitter-oauth', {
             body: {
               action: 'exchange_token',
-              oauth_token: oauthToken,
-              oauth_verifier: oauthVerifier,
+              code: code,
+              state: state,
               userId: user.id
             }
           });
@@ -43,7 +43,7 @@ const Index = () => {
             setIsConnected(true);
             toast({
               title: "Twitter Connected!",
-              description: `Successfully connected as @${data.screen_name}`,
+              description: `Successfully connected as @${data.username}`,
             });
 
             // Clean up URL
