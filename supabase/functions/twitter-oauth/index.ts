@@ -38,9 +38,9 @@ serve(async (req) => {
   }
 
   try {
-    const { action, code, state, userId } = await req.json();
+    const { action, code, state, code_verifier, userId } = await req.json();
 
-    console.log('Received request:', { action, code: code ? 'present' : 'missing', state, userId });
+    console.log('Received request:', { action, code: code ? 'present' : 'missing', state, code_verifier: code_verifier ? 'present' : 'missing', userId });
 
     if (!CLIENT_ID || !CLIENT_SECRET) {
       throw new Error('Twitter OAuth credentials not configured');
@@ -83,15 +83,14 @@ serve(async (req) => {
     } else if (action === 'exchange_token') {
       // Step 2: Exchange authorization code for access token
       const redirectUri = `${supabaseUrl}/functions/v1/twitter-oauth-callback`;
-      const codeVerifier = userId; // We pass code_verifier as userId
 
-      console.log('Token exchange params:', { code, redirectUri, codeVerifier });
+      console.log('Token exchange params:', { code, redirectUri, code_verifier });
 
       const tokenParams = new URLSearchParams({
         grant_type: 'authorization_code',
         code: code,
         redirect_uri: redirectUri,
-        code_verifier: codeVerifier,
+        code_verifier: code_verifier,
         client_id: CLIENT_ID
       });
 

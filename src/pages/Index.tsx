@@ -22,8 +22,21 @@ const Index = () => {
       const code = urlParams.get('code');
       const state = urlParams.get('state');
       const twitterAuth = urlParams.get('twitter_auth');
+      const error = urlParams.get('error');
 
-      console.log('OAuth callback params:', { code, state, twitterAuth });
+      console.log('OAuth callback params:', { code, state, twitterAuth, error });
+
+      if (twitterAuth === 'error' && error) {
+        console.error('Twitter OAuth error:', error);
+        toast({
+          title: "Twitter Connection Failed",
+          description: `Error: ${error}`,
+          variant: "destructive",
+        });
+        // Clean up URL
+        window.history.replaceState({}, document.title, window.location.pathname);
+        return;
+      }
 
       if (twitterAuth === 'success' && code && state && user) {
         try {
@@ -49,7 +62,7 @@ const Index = () => {
               action: 'exchange_token',
               code: code,
               state: state,
-              userId: storedCodeVerifier
+              code_verifier: storedCodeVerifier
             }
           });
 
