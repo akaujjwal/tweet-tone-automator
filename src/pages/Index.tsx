@@ -1,4 +1,3 @@
-
 import { useState, useEffect } from "react";
 import { Sidebar } from "@/components/Sidebar";
 import { Dashboard } from "@/components/Dashboard";
@@ -46,16 +45,18 @@ const Index = () => {
 
           console.log('Stored OAuth data:', { 
             storedState: storedState ? 'present' : 'missing', 
-            storedCodeVerifier: storedCodeVerifier ? 'present' : 'missing' 
+            storedCodeVerifier: storedCodeVerifier ? 'present' : 'missing',
+            receivedState: state
           });
 
           if (!storedState || !storedCodeVerifier) {
+            console.error('Missing stored OAuth data');
             throw new Error('OAuth session expired. Please try connecting again.');
           }
 
           if (storedState !== state) {
             console.error('State mismatch:', { stored: storedState, received: state });
-            throw new Error('Invalid OAuth state. Please try connecting again.');
+            throw new Error('Invalid OAuth state. Security check failed.');
           }
 
           console.log('Exchanging code for token...');
@@ -70,51 +71,65 @@ const Index = () => {
             }
           });
 
-          console.log('Token exchange response:', { data, error: functionError });
+          console.log('Token exchange response:', { 
+            success: data?.success, 
+            error: functionError,
+            hasUsername: !!data?.username,
+            hasAccessToken: !!data?.access_token
+          });
 
           if (functionError) {
-            console.error('Function error:', functionError);
+            console.error('Supabase function error:', functionError);
             throw new Error(functionError.message || 'Failed to exchange token');
           }
 
-          if (data && data.success) {
-            // Store Twitter credentials in localStorage
-            localStorage.setItem('twitter_username', data.username);
-            localStorage.setItem('twitter_access_token', data.access_token);
-            if (data.refresh_token) {
-              localStorage.setItem('twitter_refresh_token', data.refresh_token);
-            }
+          if (!data) {
+            throw new Error('No response data from token exchange');
+          }
 
-            // Clean up OAuth data
-            localStorage.removeItem('twitter_oauth_state');
-            localStorage.removeItem('twitter_oauth_code_verifier');
-
-            setIsConnected(true);
-            toast({
-              title: "Twitter Connected!",
-              description: `Successfully connected as @${data.username}`,
-            });
-
-            console.log('Twitter connection successful!');
-          } else {
-            const errorMessage = data?.error || 'Token exchange failed';
+          if (!data.success) {
+            const errorMessage = data.error || 'Token exchange failed';
             console.error('Token exchange failed:', errorMessage);
             throw new Error(errorMessage);
           }
+
+          if (!data.username || !data.access_token) {
+            throw new Error('Incomplete token exchange response');
+          }
+
+          // Store Twitter credentials in localStorage
+          localStorage.setItem('twitter_username', data.username);
+          localStorage.setItem('twitter_access_token', data.access_token);
+          if (data.refresh_token) {
+            localStorage.setItem('twitter_refresh_token', data.refresh_token);
+          }
+
+          // Clean up OAuth data
+          localStorage.removeItem('twitter_oauth_state');
+          localStorage.removeItem('twitter_oauth_code_verifier');
+
+          setIsConnected(true);
+          toast({
+            title: "Twitter Connected!",
+            description: `Successfully connected as @${data.username}`,
+          });
+
+          console.log('Twitter connection successful!');
 
           // Clean up URL
           window.history.replaceState({}, document.title, window.location.pathname);
         } catch (error: any) {
           console.error('Twitter OAuth error:', error);
+          
+          // Clean up OAuth data on error
+          localStorage.removeItem('twitter_oauth_state');
+          localStorage.removeItem('twitter_oauth_code_verifier');
+          
           toast({
             title: "Connection Failed",
             description: error.message || "Failed to complete Twitter connection",
             variant: "destructive",
           });
-
-          // Clean up OAuth data on error
-          localStorage.removeItem('twitter_oauth_state');
-          localStorage.removeItem('twitter_oauth_code_verifier');
           
           // Clean up URL
           window.history.replaceState({}, document.title, window.location.pathname);
