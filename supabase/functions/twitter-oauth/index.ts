@@ -43,7 +43,14 @@ serve(async (req) => {
     console.log('Received request:', { action, code: code ? 'present' : 'missing', state, code_verifier: code_verifier ? 'present' : 'missing', userId });
 
     if (!CLIENT_ID || !CLIENT_SECRET) {
-      throw new Error('Twitter OAuth credentials not configured');
+      console.error('Missing Twitter OAuth credentials');
+      return new Response(JSON.stringify({ 
+        error: 'Twitter OAuth credentials not configured. Please check your environment variables.',
+        success: false 
+      }), {
+        status: 500,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
     }
 
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
@@ -84,7 +91,22 @@ serve(async (req) => {
       // Step 2: Exchange authorization code for access token
       const redirectUri = `${supabaseUrl}/functions/v1/twitter-oauth-callback`;
 
-      console.log('Token exchange params:', { code, redirectUri, code_verifier });
+      console.log('Token exchange params:', { 
+        code: code ? `${code.substring(0, 20)}...` : 'missing', 
+        redirectUri, 
+        code_verifier: code_verifier ? 'present' : 'missing' 
+      });
+
+      if (!code || !code_verifier) {
+        console.error('Missing required parameters for token exchange');
+        return new Response(JSON.stringify({ 
+          error: 'Missing authorization code or code verifier',
+          success: false 
+        }), {
+          status: 400,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
 
       const tokenParams = new URLSearchParams({
         grant_type: 'authorization_code',
@@ -112,7 +134,14 @@ serve(async (req) => {
       console.log('Token exchange response:', responseText);
 
       if (!response.ok) {
-        throw new Error(`Failed to get access token: ${response.status} - ${responseText}`);
+        console.error('Token exchange failed:', response.status, responseText);
+        return new Response(JSON.stringify({ 
+          error: `Failed to get access token: ${response.status} - ${responseText}`,
+          success: false 
+        }), {
+          status: 400,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
       }
 
       const tokenData = JSON.parse(responseText);
@@ -129,7 +158,14 @@ serve(async (req) => {
       console.log('User data response:', userData);
 
       if (!userResponse.ok) {
-        throw new Error(`Failed to get user info: ${JSON.stringify(userData)}`);
+        console.error('Failed to get user info:', userData);
+        return new Response(JSON.stringify({ 
+          error: `Failed to get user info: ${JSON.stringify(userData)}`,
+          success: false 
+        }), {
+          status: 400,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
       }
 
       return new Response(JSON.stringify({ 
@@ -142,12 +178,18 @@ serve(async (req) => {
       });
     }
 
-    throw new Error('Invalid action');
+    return new Response(JSON.stringify({ 
+      error: 'Invalid action',
+      success: false 
+    }), {
+      status: 400,
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+    });
 
   } catch (error: any) {
     console.error('Error in twitter-oauth function:', error);
     return new Response(JSON.stringify({ 
-      error: error.message,
+      error: error.message || 'Internal server error',
       success: false 
     }), {
       status: 500,

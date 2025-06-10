@@ -24,7 +24,7 @@ const Index = () => {
       const twitterAuth = urlParams.get('twitter_auth');
       const error = urlParams.get('error');
 
-      console.log('OAuth callback params:', { code, state, twitterAuth, error });
+      console.log('OAuth callback params:', { code: code ? 'present' : 'missing', state, twitterAuth, error });
 
       if (twitterAuth === 'error' && error) {
         console.error('Twitter OAuth error:', error);
@@ -44,20 +44,24 @@ const Index = () => {
           const storedState = localStorage.getItem('twitter_oauth_state');
           const storedCodeVerifier = localStorage.getItem('twitter_oauth_code_verifier');
 
-          console.log('Stored OAuth data:', { storedState, storedCodeVerifier });
+          console.log('Stored OAuth data:', { 
+            storedState: storedState ? 'present' : 'missing', 
+            storedCodeVerifier: storedCodeVerifier ? 'present' : 'missing' 
+          });
 
           if (!storedState || !storedCodeVerifier) {
             throw new Error('OAuth session expired. Please try connecting again.');
           }
 
           if (storedState !== state) {
+            console.error('State mismatch:', { stored: storedState, received: state });
             throw new Error('Invalid OAuth state. Please try connecting again.');
           }
 
           console.log('Exchanging code for token...');
 
           // Exchange the authorization code for access tokens
-          const { data, error } = await supabase.functions.invoke('twitter-oauth', {
+          const { data, error: functionError } = await supabase.functions.invoke('twitter-oauth', {
             body: {
               action: 'exchange_token',
               code: code,
@@ -66,10 +70,11 @@ const Index = () => {
             }
           });
 
-          console.log('Token exchange response:', { data, error });
+          console.log('Token exchange response:', { data, error: functionError });
 
-          if (error) {
-            throw new Error(error.message || 'Failed to exchange token');
+          if (functionError) {
+            console.error('Function error:', functionError);
+            throw new Error(functionError.message || 'Failed to exchange token');
           }
 
           if (data && data.success) {
@@ -92,7 +97,9 @@ const Index = () => {
 
             console.log('Twitter connection successful!');
           } else {
-            throw new Error('Token exchange failed');
+            const errorMessage = data?.error || 'Token exchange failed';
+            console.error('Token exchange failed:', errorMessage);
+            throw new Error(errorMessage);
           }
 
           // Clean up URL
