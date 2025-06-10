@@ -11,9 +11,11 @@ serve(async (req) => {
 
     console.log('OAuth callback received:', { code: code ? 'present' : 'missing', state, error });
 
+    // Use the correct app URL - get it from the request origin or use the current domain
+    const appUrl = 'https://3219dda9-d4f2-4be0-965d-b5b9fd9ccadf.lovableproject.com';
+
     if (error) {
       // User denied access or other error
-      const appUrl = 'https://loving-waffle-01f11e.lovableproject.com';
       const redirectUrl = `${appUrl}/?twitter_auth=error&error=${encodeURIComponent(error)}`;
       
       return new Response(null, {
@@ -29,7 +31,6 @@ serve(async (req) => {
     }
 
     // Redirect back to your app with the OAuth parameters
-    const appUrl = 'https://loving-waffle-01f11e.lovableproject.com';
     const redirectUrl = `${appUrl}/?code=${encodeURIComponent(code)}&state=${encodeURIComponent(state)}&twitter_auth=success`;
 
     console.log('Redirecting to:', redirectUrl);
@@ -44,7 +45,7 @@ serve(async (req) => {
   } catch (error: any) {
     console.error('Error in twitter-oauth-callback:', error);
     
-    const appUrl = 'https://loving-waffle-01f11e.lovableproject.com';
+    const appUrl = 'https://3219dda9-d4f2-4be0-965d-b5b9fd9ccadf.lovableproject.com';
     const redirectUrl = `${appUrl}/?twitter_auth=error&error=${encodeURIComponent(error.message)}`;
     
     return new Response(null, {
