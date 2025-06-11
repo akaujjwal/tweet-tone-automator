@@ -1,4 +1,3 @@
-
 import { useState, useEffect } from "react";
 import { Sidebar } from "@/components/Sidebar";
 import { Dashboard } from "@/components/Dashboard";
@@ -50,24 +49,32 @@ const Index = () => {
         console.log('Processing OAuth success callback...');
         
         try {
-          // Get stored OAuth parameters from localStorage
+          // Get stored OAuth parameters from localStorage with enhanced checking
           const storedState = localStorage.getItem('twitter_oauth_state');
           const storedCodeVerifier = localStorage.getItem('twitter_oauth_code_verifier');
+          const timestamp = localStorage.getItem('twitter_oauth_timestamp');
 
           console.log('OAuth validation:', { 
             storedState: storedState ? `${storedState.substring(0, 10)}...` : 'missing', 
             storedCodeVerifier: storedCodeVerifier ? 'present' : 'missing',
             receivedState: state ? `${state.substring(0, 10)}...` : 'missing',
-            stateMatch: storedState === state
+            stateMatch: storedState === state,
+            timestamp: timestamp ? `stored ${Math.round((Date.now() - parseInt(timestamp)) / 1000)}s ago` : 'missing'
           });
 
           if (!storedState || !storedCodeVerifier) {
-            console.error('Missing stored OAuth data');
+            console.error('Missing stored OAuth data. Current localStorage keys:', Object.keys(localStorage));
+            
+            // Try to find any OAuth related data in localStorage for debugging
+            const allKeys = Object.keys(localStorage);
+            const oauthKeys = allKeys.filter(key => key.includes('oauth') || key.includes('twitter'));
+            console.log('Found OAuth-related keys in localStorage:', oauthKeys);
+            
             throw new Error('OAuth session data not found. Please try connecting again.');
           }
 
           if (storedState !== state) {
-            console.error('State mismatch - possible CSRF attack');
+            console.error('State mismatch - possible CSRF attack or session expired');
             throw new Error('OAuth state validation failed. Please try connecting again.');
           }
 
@@ -116,6 +123,7 @@ const Index = () => {
           // Clean up OAuth session data
           localStorage.removeItem('twitter_oauth_state');
           localStorage.removeItem('twitter_oauth_code_verifier');
+          localStorage.removeItem('twitter_oauth_timestamp');
 
           console.log('Twitter connection successful:', { username: data.username });
 
@@ -134,6 +142,7 @@ const Index = () => {
           // Clean up OAuth data on error
           localStorage.removeItem('twitter_oauth_state');
           localStorage.removeItem('twitter_oauth_code_verifier');
+          localStorage.removeItem('twitter_oauth_timestamp');
           
           toast({
             title: "Connection Failed",
