@@ -1,4 +1,3 @@
-
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.50.0';
 
@@ -83,7 +82,8 @@ serve(async (req) => {
         scope: 'tweet.read tweet.write users.read offline.access',
         state: stateParam,
         code_challenge: codeChallenge,
-        code_challenge_method: 'S256'
+        code_challenge_method: 'S256',
+        force_login: 'true' // This forces Twitter to show login screen
       });
 
       const authUrl = `https://twitter.com/i/oauth2/authorize?${params.toString()}`;
