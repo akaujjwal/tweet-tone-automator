@@ -29,9 +29,17 @@ export const Dashboard = ({ isConnected, setIsConnected }: DashboardProps) => {
   const checkTwitterConnection = async () => {
     try {
       const username = localStorage.getItem('twitter_username');
-      if (username) {
+      const token = localStorage.getItem('twitter_access_token');
+      
+      console.log('Dashboard checking Twitter connection:', {
+        hasUsername: !!username,
+        hasToken: !!token
+      });
+      
+      if (username && token) {
         setTwitterUsername(username);
         setIsConnected(true);
+        console.log('Dashboard found existing Twitter connection:', username);
       }
     } catch (error) {
       console.error('Error checking Twitter connection:', error);
@@ -49,27 +57,50 @@ export const Dashboard = ({ isConnected, setIsConnected }: DashboardProps) => {
     }
 
     setLoading(true);
+    
     try {
+      console.log('Initiating Twitter OAuth flow...');
+      
       // Generate Twitter OAuth URL
-      const response = await supabase.functions.invoke('twitter-oauth', {
+      const { data, error } = await supabase.functions.invoke('twitter-oauth', {
         body: { 
           action: 'get_auth_url',
           userId: user.id 
         }
       });
 
-      if (response.error) {
-        throw new Error(response.error.message);
+      console.log('OAuth URL generation response:', {
+        success: data?.success,
+        error: error?.message,
+        hasAuthUrl: !!data?.auth_url,
+        hasState: !!data?.state,
+        hasCodeVerifier: !!data?.code_verifier
+      });
+
+      if (error) {
+        throw new Error(error.message || 'Failed to generate OAuth URL');
       }
 
-      // Store OAuth parameters in localStorage
-      localStorage.setItem('twitter_oauth_state', response.data.state);
-      localStorage.setItem('twitter_oauth_code_verifier', response.data.code_verifier);
+      if (!data?.success || !data?.auth_url) {
+        throw new Error(data?.error || 'Failed to generate OAuth URL');
+      }
+
+      // Store OAuth parameters in localStorage with debug info
+      console.log('Storing OAuth parameters:', {
+        state: data.state ? `${data.state.substring(0, 10)}...` : 'missing',
+        codeVerifier: data.code_verifier ? 'present' : 'missing'
+      });
+      
+      localStorage.setItem('twitter_oauth_state', data.state);
+      localStorage.setItem('twitter_oauth_code_verifier', data.code_verifier);
+
+      console.log('Redirecting to Twitter OAuth:', data.auth_url);
 
       // Redirect to Twitter OAuth
-      window.location.href = response.data.auth_url;
+      window.location.href = data.auth_url;
+      
     } catch (error: any) {
-      console.error('Twitter OAuth error:', error);
+      console.error('Twitter OAuth initiation error:', error);
       toast({
         title: "Connection Failed",
         description: error.message || "Failed to connect to Twitter",
@@ -82,10 +113,14 @@ export const Dashboard = ({ isConnected, setIsConnected }: DashboardProps) => {
 
   const handleDisconnect = async () => {
     try {
+      console.log('Disconnecting Twitter account...');
+      
       // Remove Twitter credentials from localStorage
       localStorage.removeItem('twitter_username');
       localStorage.removeItem('twitter_access_token');
       localStorage.removeItem('twitter_refresh_token');
+      localStorage.removeItem('twitter_oauth_state');
+      localStorage.removeItem('twitter_oauth_code_verifier');
 
       setIsConnected(false);
       setAutoReplyEnabled(false);
@@ -95,7 +130,10 @@ export const Dashboard = ({ isConnected, setIsConnected }: DashboardProps) => {
         title: "Disconnected from X",
         description: "Your account has been disconnected.",
       });
+      
+      console.log('Twitter account disconnected successfully');
     } catch (error: any) {
+      console.error('Disconnect error:', error);
       toast({
         title: "Error",
         description: "Failed to disconnect account",

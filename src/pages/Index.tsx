@@ -1,3 +1,4 @@
+
 import { useState, useEffect } from "react";
 import { Sidebar } from "@/components/Sidebar";
 import { Dashboard } from "@/components/Dashboard";
@@ -23,8 +24,15 @@ const Index = () => {
       const twitterAuth = urlParams.get('twitter_auth');
       const error = urlParams.get('error');
 
-      console.log('OAuth callback params:', { code: code ? 'present' : 'missing', state, twitterAuth, error });
+      console.log('OAuth callback params:', { 
+        code: code ? 'present' : 'missing', 
+        state: state ? 'present' : 'missing', 
+        twitterAuth, 
+        error,
+        fullURL: window.location.href
+      });
 
+      // Handle Twitter OAuth error
       if (twitterAuth === 'error' && error) {
         console.error('Twitter OAuth error:', error);
         toast({
@@ -37,29 +45,33 @@ const Index = () => {
         return;
       }
 
+      // Handle successful OAuth callback
       if (twitterAuth === 'success' && code && state && user) {
+        console.log('Processing OAuth success callback...');
+        
         try {
           // Get stored OAuth parameters from localStorage
           const storedState = localStorage.getItem('twitter_oauth_state');
           const storedCodeVerifier = localStorage.getItem('twitter_oauth_code_verifier');
 
-          console.log('Stored OAuth data:', { 
-            storedState: storedState ? 'present' : 'missing', 
+          console.log('OAuth validation:', { 
+            storedState: storedState ? `${storedState.substring(0, 10)}...` : 'missing', 
             storedCodeVerifier: storedCodeVerifier ? 'present' : 'missing',
-            receivedState: state
+            receivedState: state ? `${state.substring(0, 10)}...` : 'missing',
+            stateMatch: storedState === state
           });
 
           if (!storedState || !storedCodeVerifier) {
             console.error('Missing stored OAuth data');
-            throw new Error('OAuth session expired. Please try connecting again.');
+            throw new Error('OAuth session data not found. Please try connecting again.');
           }
 
           if (storedState !== state) {
-            console.error('State mismatch:', { stored: storedState, received: state });
-            throw new Error('Invalid OAuth state. Security check failed.');
+            console.error('State mismatch - possible CSRF attack');
+            throw new Error('OAuth state validation failed. Please try connecting again.');
           }
 
-          console.log('Exchanging code for token...');
+          console.log('Exchanging authorization code for tokens...');
 
           // Exchange the authorization code for access tokens
           const { data, error: functionError } = await supabase.functions.invoke('twitter-oauth', {
@@ -73,53 +85,51 @@ const Index = () => {
 
           console.log('Token exchange response:', { 
             success: data?.success, 
-            error: functionError,
+            error: functionError?.message,
             hasUsername: !!data?.username,
             hasAccessToken: !!data?.access_token
           });
 
           if (functionError) {
             console.error('Supabase function error:', functionError);
-            throw new Error(functionError.message || 'Failed to exchange token');
+            throw new Error(functionError.message || 'Failed to exchange authorization code');
           }
 
-          if (!data) {
-            throw new Error('No response data from token exchange');
-          }
-
-          if (!data.success) {
-            const errorMessage = data.error || 'Token exchange failed';
+          if (!data?.success) {
+            const errorMessage = data?.error || 'Token exchange failed';
             console.error('Token exchange failed:', errorMessage);
             throw new Error(errorMessage);
           }
 
           if (!data.username || !data.access_token) {
-            throw new Error('Incomplete token exchange response');
+            console.error('Incomplete token response:', data);
+            throw new Error('Incomplete response from Twitter API');
           }
 
-          // Store Twitter credentials in localStorage
+          // Store Twitter credentials securely
           localStorage.setItem('twitter_username', data.username);
           localStorage.setItem('twitter_access_token', data.access_token);
           if (data.refresh_token) {
             localStorage.setItem('twitter_refresh_token', data.refresh_token);
           }
 
-          // Clean up OAuth data
+          // Clean up OAuth session data
           localStorage.removeItem('twitter_oauth_state');
           localStorage.removeItem('twitter_oauth_code_verifier');
 
+          console.log('Twitter connection successful:', { username: data.username });
+
           setIsConnected(true);
           toast({
-            title: "Twitter Connected!",
-            description: `Successfully connected as @${data.username}`,
+            title: "Twitter Connected Successfully!",
+            description: `Connected as @${data.username}`,
           });
-
-          console.log('Twitter connection successful!');
 
           // Clean up URL
           window.history.replaceState({}, document.title, window.location.pathname);
+
         } catch (error: any) {
-          console.error('Twitter OAuth error:', error);
+          console.error('OAuth processing error:', error);
           
           // Clean up OAuth data on error
           localStorage.removeItem('twitter_oauth_state');
@@ -146,8 +156,16 @@ const Index = () => {
   useEffect(() => {
     if (user) {
       const twitterUsername = localStorage.getItem('twitter_username');
-      if (twitterUsername) {
+      const twitterToken = localStorage.getItem('twitter_access_token');
+      
+      console.log('Checking existing Twitter connection:', {
+        hasUsername: !!twitterUsername,
+        hasToken: !!twitterToken
+      });
+      
+      if (twitterUsername && twitterToken) {
         setIsConnected(true);
+        console.log('Found existing Twitter connection');
       }
     }
   }, [user]);
