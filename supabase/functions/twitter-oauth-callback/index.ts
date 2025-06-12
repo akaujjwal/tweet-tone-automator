@@ -11,8 +11,21 @@ serve(async (req) => {
 
     console.log('OAuth callback received:', { code: code ? 'present' : 'missing', state, error });
 
-    // Use the correct app URL - get it from the request origin or use the current domain
-    const appUrl = 'https://3219dda9-d4f2-4be0-965d-b5b9fd9ccadf.lovableproject.com';
+    // Get the correct app URL from the request headers
+    const origin = req.headers.get('origin') || req.headers.get('referer');
+    let appUrl = 'https://id-preview--3219dda9-d4f2-4be0-965d-b5b9fd9ccadf.lovable.app';
+    
+    // If we have an origin, extract the base URL
+    if (origin) {
+      try {
+        const originUrl = new URL(origin);
+        appUrl = `${originUrl.protocol}//${originUrl.host}`;
+      } catch (e) {
+        console.log('Could not parse origin:', origin);
+      }
+    }
+
+    console.log('Using app URL:', appUrl);
 
     if (error) {
       // User denied access or other error
@@ -45,7 +58,7 @@ serve(async (req) => {
   } catch (error: any) {
     console.error('Error in twitter-oauth-callback:', error);
     
-    const appUrl = 'https://3219dda9-d4f2-4be0-965d-b5b9fd9ccadf.lovableproject.com';
+    const appUrl = 'https://id-preview--3219dda9-d4f2-4be0-965d-b5b9fd9ccadf.lovable.app';
     const redirectUrl = `${appUrl}/?twitter_auth=error&error=${encodeURIComponent(error.message)}`;
     
     return new Response(null, {

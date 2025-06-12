@@ -64,6 +64,7 @@ export const Dashboard = ({ isConnected, setIsConnected }: DashboardProps) => {
       // Clear any existing OAuth data before starting new flow
       localStorage.removeItem('twitter_oauth_state');
       localStorage.removeItem('twitter_oauth_code_verifier');
+      localStorage.removeItem('twitter_oauth_timestamp');
       
       // Generate Twitter OAuth URL
       const { data, error } = await supabase.functions.invoke('twitter-oauth', {
@@ -93,39 +94,48 @@ export const Dashboard = ({ isConnected, setIsConnected }: DashboardProps) => {
         throw new Error('Missing OAuth parameters from server');
       }
 
-      // Store OAuth parameters in localStorage with enhanced error checking
+      // Store OAuth parameters with enhanced persistence
       console.log('Storing OAuth parameters:', {
         state: data.state ? `${data.state.substring(0, 10)}...` : 'missing',
         codeVerifier: data.code_verifier ? 'present' : 'missing'
       });
       
-      // Use a unique prefix to avoid conflicts
-      const stateKey = 'twitter_oauth_state_' + Date.now();
-      const verifierKey = 'twitter_oauth_code_verifier_' + Date.now();
+      // Use sessionStorage as primary storage with localStorage as backup
+      const timestamp = Date.now().toString();
+      const oauthData = {
+        state: data.state,
+        code_verifier: data.code_verifier,
+        timestamp: timestamp,
+        user_id: user.id
+      };
       
-      // Store with timestamp for debugging
+      // Store in both sessionStorage and localStorage for maximum persistence
+      sessionStorage.setItem('twitter_oauth_data', JSON.stringify(oauthData));
       localStorage.setItem('twitter_oauth_state', data.state);
       localStorage.setItem('twitter_oauth_code_verifier', data.code_verifier);
-      localStorage.setItem('twitter_oauth_timestamp', Date.now().toString());
+      localStorage.setItem('twitter_oauth_timestamp', timestamp);
+      localStorage.setItem('twitter_oauth_user_id', user.id);
       
       // Verify storage immediately
+      const storedSessionData = sessionStorage.getItem('twitter_oauth_data');
       const storedState = localStorage.getItem('twitter_oauth_state');
       const storedVerifier = localStorage.getItem('twitter_oauth_code_verifier');
       
       console.log('Verification after storage:', {
+        sessionDataStored: !!storedSessionData,
         stateStored: storedState === data.state,
         verifierStored: !!storedVerifier,
         stateMatch: storedState?.substring(0, 10) + '...'
       });
 
       if (!storedState || !storedVerifier) {
-        throw new Error('Failed to store OAuth parameters in localStorage');
+        throw new Error('Failed to store OAuth parameters in browser storage');
       }
 
       console.log('Redirecting to Twitter OAuth:', data.auth_url);
 
-      // Add a small delay to ensure localStorage is written
-      await new Promise(resolve => setTimeout(resolve, 100));
+      // Add a small delay to ensure storage is written
+      await new Promise(resolve => setTimeout(resolve, 200));
 
       // Redirect to Twitter OAuth
       window.location.href = data.auth_url;
@@ -146,13 +156,15 @@ export const Dashboard = ({ isConnected, setIsConnected }: DashboardProps) => {
     try {
       console.log('Disconnecting Twitter account...');
       
-      // Remove Twitter credentials from localStorage
+      // Remove Twitter credentials from all storage locations
       localStorage.removeItem('twitter_username');
       localStorage.removeItem('twitter_access_token');
       localStorage.removeItem('twitter_refresh_token');
       localStorage.removeItem('twitter_oauth_state');
       localStorage.removeItem('twitter_oauth_code_verifier');
       localStorage.removeItem('twitter_oauth_timestamp');
+      localStorage.removeItem('twitter_oauth_user_id');
+      sessionStorage.removeItem('twitter_oauth_data');
 
       setIsConnected(false);
       setAutoReplyEnabled(false);

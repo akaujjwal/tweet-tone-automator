@@ -49,10 +49,32 @@ const Index = () => {
         console.log('Processing OAuth success callback...');
         
         try {
-          // Get stored OAuth parameters from localStorage with enhanced checking
-          const storedState = localStorage.getItem('twitter_oauth_state');
-          const storedCodeVerifier = localStorage.getItem('twitter_oauth_code_verifier');
-          const timestamp = localStorage.getItem('twitter_oauth_timestamp');
+          // Try to get stored OAuth parameters from both storage methods
+          let storedState: string | null = null;
+          let storedCodeVerifier: string | null = null;
+          let timestamp: string | null = null;
+
+          // First try sessionStorage
+          const sessionData = sessionStorage.getItem('twitter_oauth_data');
+          if (sessionData) {
+            try {
+              const oauthData = JSON.parse(sessionData);
+              storedState = oauthData.state;
+              storedCodeVerifier = oauthData.code_verifier;
+              timestamp = oauthData.timestamp;
+              console.log('Retrieved OAuth data from sessionStorage');
+            } catch (e) {
+              console.log('Failed to parse sessionStorage OAuth data');
+            }
+          }
+
+          // Fallback to localStorage
+          if (!storedState || !storedCodeVerifier) {
+            storedState = localStorage.getItem('twitter_oauth_state');
+            storedCodeVerifier = localStorage.getItem('twitter_oauth_code_verifier');
+            timestamp = localStorage.getItem('twitter_oauth_timestamp');
+            console.log('Retrieved OAuth data from localStorage');
+          }
 
           console.log('OAuth validation:', { 
             storedState: storedState ? `${storedState.substring(0, 10)}...` : 'missing', 
@@ -63,14 +85,11 @@ const Index = () => {
           });
 
           if (!storedState || !storedCodeVerifier) {
-            console.error('Missing stored OAuth data. Current localStorage keys:', Object.keys(localStorage));
+            console.error('Missing stored OAuth data. Current storage contents:');
+            console.log('SessionStorage OAuth data:', sessionStorage.getItem('twitter_oauth_data'));
+            console.log('LocalStorage keys:', Object.keys(localStorage).filter(key => key.includes('oauth') || key.includes('twitter')));
             
-            // Try to find any OAuth related data in localStorage for debugging
-            const allKeys = Object.keys(localStorage);
-            const oauthKeys = allKeys.filter(key => key.includes('oauth') || key.includes('twitter'));
-            console.log('Found OAuth-related keys in localStorage:', oauthKeys);
-            
-            throw new Error('OAuth session data not found. Please try connecting again.');
+            throw new Error('OAuth session data not found. This may happen if you refreshed the page during authentication. Please try connecting again.');
           }
 
           if (storedState !== state) {
@@ -120,10 +139,12 @@ const Index = () => {
             localStorage.setItem('twitter_refresh_token', data.refresh_token);
           }
 
-          // Clean up OAuth session data
+          // Clean up OAuth session data from both storage locations
           localStorage.removeItem('twitter_oauth_state');
           localStorage.removeItem('twitter_oauth_code_verifier');
           localStorage.removeItem('twitter_oauth_timestamp');
+          localStorage.removeItem('twitter_oauth_user_id');
+          sessionStorage.removeItem('twitter_oauth_data');
 
           console.log('Twitter connection successful:', { username: data.username });
 
@@ -139,10 +160,12 @@ const Index = () => {
         } catch (error: any) {
           console.error('OAuth processing error:', error);
           
-          // Clean up OAuth data on error
+          // Clean up OAuth data on error from both storage locations
           localStorage.removeItem('twitter_oauth_state');
           localStorage.removeItem('twitter_oauth_code_verifier');
           localStorage.removeItem('twitter_oauth_timestamp');
+          localStorage.removeItem('twitter_oauth_user_id');
+          sessionStorage.removeItem('twitter_oauth_data');
           
           toast({
             title: "Connection Failed",
